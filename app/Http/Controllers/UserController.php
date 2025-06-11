@@ -9,14 +9,17 @@ use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class UserController extends Controller
 {
-    // ✅ Ensure full image URL is included in response
     private function formatUserResponse(User $user)
     {
-        $user->profile_image_url = $user->profile_image ? $user->profile_image : null;
-        return $user;
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'role' => $user->role,
+            'profile_image_url' => $user->profile_image ?? null,
+        ];
     }
 
-    // Sign In
     public function signIn(Request $request)
     {
         $request->validate([
@@ -40,17 +43,17 @@ class UserController extends Controller
         ]);
     }
 
-    // Sign Up
     public function signUp(Request $request)
     {
         $request->validate([
             'name' => 'required|string',
             'email' => 'required|string|email|unique:users,email',
-            'password' => 'required|string|min:8',
+            'password' => 'required|string|min:8|confirmed',
             'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
         ]);
 
         $imageUrl = null;
+
         if ($request->hasFile('profile_image')) {
             $imageUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
         }
@@ -73,22 +76,33 @@ class UserController extends Controller
         ], 201);
     }
 
-    // Update Profile
     public function updateProfile(Request $request, User $user)
     {
+        // Auth check: self or admin only
+        if ($request->user()->id !== $user->id && $request->user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         $request->validate([
             'name' => 'sometimes|string',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
             'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
         ]);
 
-        if ($request->hasFile('profile_image')) {
-            $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
-
-            $user->profile_image = $uploadedFileUrl;
+        if ($request->has('name')) {
+            $user->name = $request->name;
+        }
+        if ($request->has('email')) {
+            $user->email = $request->email;
         }
 
-        $user->update($request->except('profile_image'));
+        if ($request->hasFile('profile_image')) {
+            // Just upload new image and overwrite URL
+            $imageUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
+            $user->profile_image = $imageUrl;
+        }
+
+        $user->save();
 
         return response()->json([
             'message' => 'Profile updated successfully',
@@ -96,39 +110,39 @@ class UserController extends Controller
         ]);
     }
 
-    // Delete User
-    public function deleteUser(User $user)
+    public function deleteUser(Request $request, User $user)
     {
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // No image delete from Cloudinary because no public_id saved
+
         $user->delete();
 
         return response()->json(['message' => 'User deleted successfully']);
     }
 
-    // List Users
     public function listUsers(Request $request)
     {
-        $authUser = $request->user();
-
-        if (!$authUser || $authUser->role !== 'admin') {
+        if (!$request->user() || $request->user()->role !== 'admin') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         $users = User::latest()->get();
 
         return response()->json([
-            'users' => $users->map(function ($u) {
-                return $this->formatUserResponse($u);
-            }),
+            'users' => $users->map(fn ($u) => $this->formatUserResponse($u)),
         ]);
     }
 
-    // Delete Only Profile Image
     public function deleteProfileImage(Request $request, User $user)
     {
         if ($request->user()->id !== $user->id && $request->user()->role !== 'admin') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        // Just nullify image URL, no Cloudinary deletion
         $user->profile_image = null;
         $user->save();
 
