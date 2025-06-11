@@ -128,6 +128,15 @@ return [
 //     'providers' => [
 //     Laravel\Socialite\SocialiteServiceProvider::class,
 // ],
+'providers' => [
+    // ...
+    CloudinaryLabs\CloudinaryLaravel\CloudinaryServiceProvider::class,
+],
+
+'aliases' => [
+    // ...
+    'Cloudinary' => CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary::class,
+],
 
 
 ];
