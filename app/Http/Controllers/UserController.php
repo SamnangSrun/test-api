@@ -9,13 +9,6 @@ use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class UserController extends Controller
 {
-    // Format user response including profile image URL or null
-    private function formatUserResponse(User $user)
-    {
-        $user->profile_image_url = $user->profile_image ? $user->profile_image : null;
-        return $user;
-    }
-
     // Sign In
     public function signIn(Request $request)
     {
@@ -36,7 +29,7 @@ class UserController extends Controller
             'message' => 'Login successful',
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => $this->formatUserResponse($user),
+            'user' => $user,
         ]);
     }
 
@@ -52,9 +45,8 @@ class UserController extends Controller
 
         $imageUrl = null;
         if ($request->hasFile('profile_image')) {
-            $imageUrl = Cloudinary::upload($request->file('profile_image')->getRealPath(), [
-                'upload_preset' => 'pf_user',
-            ])->getSecurePath();
+            $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
+            $imageUrl = $uploadedFileUrl;
         }
 
         $user = User::create([
@@ -71,7 +63,7 @@ class UserController extends Controller
             'message' => 'User created successfully',
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => $this->formatUserResponse($user),
+            'user' => $user,
         ], 201);
     }
 
@@ -85,20 +77,13 @@ class UserController extends Controller
         ]);
 
         if ($request->hasFile('profile_image')) {
-            $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath(), [
-                'upload_preset' => 'pf_user',
-            ])->getSecurePath();
-
+            $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
             $user->profile_image = $uploadedFileUrl;
         }
 
-        // Update other fields except profile_image (already handled)
         $user->update($request->except('profile_image'));
 
-        return response()->json([
-            'message' => 'Profile updated successfully',
-            'user' => $this->formatUserResponse($user),
-        ]);
+        return response()->json(['message' => 'Profile updated successfully', 'user' => $user]);
     }
 
     // Delete User
@@ -109,37 +94,32 @@ class UserController extends Controller
         return response()->json(['message' => 'User deleted successfully']);
     }
 
-    // List Users (only admin)
+    // List Users (Admin Only)
     public function listUsers(Request $request)
     {
-        $authUser = $request->user();
+        $user = $request->user();
 
-        if (!$authUser || $authUser->role !== 'admin') {
+        if (!$user || $user->role !== 'admin') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
         $users = User::latest()->get();
 
-        return response()->json([
-            'users' => $users->map(function ($u) {
-                return $this->formatUserResponse($u);
-            }),
-        ]);
+        return response()->json(['users' => $users]);
     }
 
-    // Delete Only Profile Image (self or admin)
+    // Delete only the user's profile image
     public function deleteProfileImage(Request $request, User $user)
     {
         if ($request->user()->id !== $user->id && $request->user()->role !== 'admin') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $user->profile_image = null;
-        $user->save();
+        if ($user->profile_image) {
+            $user->profile_image = null;
+            $user->save();
+        }
 
-        return response()->json([
-            'message' => 'Profile image deleted successfully',
-            'user' => $this->formatUserResponse($user),
-        ]);
+        return response()->json(['message' => 'Profile image deleted successfully', 'user' => $user]);
     }
 }
