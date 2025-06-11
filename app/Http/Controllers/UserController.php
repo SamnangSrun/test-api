@@ -33,28 +33,22 @@ class UserController extends Controller
         ]);
     }
 
-    // Sign Up
-    public function signUp(Request $request)
+   public function signUp(Request $request)
     {
         $request->validate([
             'name' => 'required|string',
             'email' => 'required|string|email|unique:users,email',
             'password' => 'required|string|min:8',
-            'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
+            'profile_image_url' => 'nullable|string', // Cloudinary URL
+            'profile_public_id' => 'nullable|string' // Cloudinary public ID
         ]);
-
-        $imageUrl = null;
-        if ($request->hasFile('profile_image')) {
-            $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
-            $imageUrl = $uploadedFileUrl;
-        }
 
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'admin',
-            'profile_image' => $imageUrl,
+            'profile_image' => $request->profile_image_url,
+            'profile_public_id' => $request->profile_public_id,
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -67,23 +61,47 @@ class UserController extends Controller
         ], 201);
     }
 
-    // Update Profile
+    // Updated Update Profile method
     public function updateProfile(Request $request, User $user)
     {
         $request->validate([
             'name' => 'sometimes|string',
             'email' => 'sometimes|email|unique:users,email,' . $user->id,
-            'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
+            'profile_image_url' => 'nullable|string',
+            'profile_public_id' => 'nullable|string',
+            'remove_profile_image' => 'sometimes|boolean'
         ]);
 
-        if ($request->hasFile('profile_image')) {
-            $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
-            $user->profile_image = $uploadedFileUrl;
+        // Handle profile image removal
+        if ($request->input('remove_profile_image')) {
+            if ($user->profile_public_id) {
+                Cloudinary::destroy($user->profile_public_id);
+            }
+            $user->profile_image = null;
+            $user->profile_public_id = null;
         }
 
-        $user->update($request->except('profile_image'));
+        // Update profile image if new URL provided
+        if ($request->has('profile_image_url') && $request->profile_image_url) {
+            // Delete old image if exists
+            if ($user->profile_public_id) {
+                Cloudinary::destroy($user->profile_public_id);
+            }
+            
+            $user->profile_image = $request->profile_image_url;
+            $user->profile_public_id = $request->profile_public_id;
+        }
 
-        return response()->json(['message' => 'Profile updated successfully', 'user' => $user]);
+        // Update other fields
+        $user->name = $request->input('name', $user->name);
+        $user->email = $request->input('email', $user->email);
+
+        $user->save();
+
+        return response()->json([
+            'message' => 'Profile updated successfully',
+            'user' => $user
+        ]);
     }
 
     // Delete User
@@ -121,5 +139,37 @@ class UserController extends Controller
         }
 
         return response()->json(['message' => 'Profile image deleted successfully', 'user' => $user]);
+    }
+
+
+    
+    public function getSignature()
+    {
+        return response()->json([
+            'cloud_name' => config('cloudinary.cloud_name'),
+            'api_key' => config('cloudinary.api_key'),
+            'upload_preset' => config('cloudinary.upload_preset'),
+        ]);
+    }
+
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+        ]);
+
+        $uploadedFile = Cloudinary::upload($request->file('file')->getRealPath(), [
+            'folder' => 'user_profile_images',
+            'transformation' => [
+                'width' => 500,
+                'height' => 500,
+                'crop' => 'fill'
+            ]
+        ]);
+
+        return response()->json([
+            'secure_url' => $uploadedFile->getSecurePath(),
+            'public_id' => $uploadedFile->getPublicId(),
+        ]);
     }
 }

@@ -21,7 +21,8 @@ use App\Models\Payment;
 
 // Route::get('/auth/google/redirect', [UserController::class, 'redirect']);
 // Route::get('/auth/google/callback', [UserController::class, 'callback']);
-
+Route::get('/cloudinary/signature', [UserController::class, 'getSignature']);
+Route::post('/cloudinary/upload', [UserController::class, 'uploadImage']);
 Route::post('sign-in', [UserController::class, 'signIn']);
 Route::post('sign-up', [UserController::class, 'signUp']);
 Route::post('request-sellers', [SellerRequestController::class, 'requestSeller']);
