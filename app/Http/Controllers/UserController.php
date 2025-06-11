@@ -5,14 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
+use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class UserController extends Controller
 {
-    // Helper to return full image URL
+    // Helper to return Cloudinary URL directly
     private function formatUserResponse(User $user)
     {
-        $user->profile_image_url = $user->profile_image ? asset('storage/' . $user->profile_image) : null;
+        $user->profile_image_url = $user->profile_image ?? null;
         return $user;
     }
 
@@ -50,9 +50,10 @@ class UserController extends Controller
             'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
         ]);
 
-        $imagePath = null;
+        $imageUrl = null;
         if ($request->hasFile('profile_image')) {
-            $imagePath = $request->file('profile_image')->store('profile_images', 'public');
+            $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
+            $imageUrl = $uploadedFileUrl;
         }
 
         $user = User::create([
@@ -60,7 +61,7 @@ class UserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'admin',
-            'profile_image' => $imagePath,
+            'profile_image' => $imageUrl,
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -83,11 +84,8 @@ class UserController extends Controller
         ]);
 
         if ($request->hasFile('profile_image')) {
-            if ($user->profile_image) {
-                Storage::disk('public')->delete($user->profile_image);
-            }
-
-            $user->profile_image = $request->file('profile_image')->store('profile_images', 'public');
+            $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
+            $user->profile_image = $uploadedFileUrl;
         }
 
         $user->update($request->except('profile_image'));
@@ -101,16 +99,12 @@ class UserController extends Controller
     // Delete User
     public function deleteUser(User $user)
     {
-        if ($user->profile_image) {
-            Storage::disk('public')->delete($user->profile_image);
-        }
-
         $user->delete();
 
         return response()->json(['message' => 'User deleted successfully']);
     }
 
-    // List Users (Admin Only)
+    // List Users
     public function listUsers(Request $request)
     {
         $authUser = $request->user();
@@ -135,11 +129,8 @@ class UserController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        if ($user->profile_image) {
-            Storage::disk('public')->delete($user->profile_image);
-            $user->profile_image = null;
-            $user->save();
-        }
+        $user->profile_image = null;
+        $user->save();
 
         return response()->json([
             'message' => 'Profile image deleted successfully',
