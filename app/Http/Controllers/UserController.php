@@ -9,10 +9,10 @@ use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class UserController extends Controller
 {
-    // Helper to return Cloudinary URL directly
+    // ✅ Ensure full image URL is included in response
     private function formatUserResponse(User $user)
     {
-        $user->profile_image_url = $user->profile_image ?? null;
+        $user->profile_image_url = $user->profile_image ? $user->profile_image : null;
         return $user;
     }
 
@@ -52,8 +52,7 @@ class UserController extends Controller
 
         $imageUrl = null;
         if ($request->hasFile('profile_image')) {
-            $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
-            $imageUrl = $uploadedFileUrl;
+            $imageUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
         }
 
         $user = User::create([
@@ -85,6 +84,7 @@ class UserController extends Controller
 
         if ($request->hasFile('profile_image')) {
             $uploadedFileUrl = Cloudinary::upload($request->file('profile_image')->getRealPath())->getSecurePath();
+
             $user->profile_image = $uploadedFileUrl;
         }
 
