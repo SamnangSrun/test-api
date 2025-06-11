@@ -49,7 +49,7 @@ class UserController extends Controller
         ]);
     }
 
-    // Sign Up
+  
     public function signUp(Request $request)
     {
         $request->validate([
@@ -59,13 +59,16 @@ class UserController extends Controller
             'profile_image' => 'nullable|image|mimes:jpg,jpeg,png',
         ]);
 
-        $profileImageUrl = null;
-        $profileImageId = null;
+        $imageUrl = null;
 
         if ($request->hasFile('profile_image')) {
-            $uploaded = $this->uploadToCloudinary($request->file('profile_image'));
-            $profileImageUrl = $uploaded['url'];
-            $profileImageId = $uploaded['public_id'];
+            $uploadedFile = $request->file('profile_image')->getRealPath();
+
+            $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
+                'upload_preset' => 'pf_user',
+            ]);
+
+            $imageUrl = $uploaded['secure_url']; // Full Cloudinary URL
         }
 
         $user = User::create([
@@ -73,8 +76,7 @@ class UserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => 'admin',
-            'profile_image_url' => $profileImageUrl,
-            'profile_image_id' => $profileImageId,
+            'profile_image' => $imageUrl,
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -87,7 +89,6 @@ class UserController extends Controller
         ], 201);
     }
 
-    // Update Profile
     public function updateProfile(Request $request, User $user)
     {
         $request->validate([
@@ -97,24 +98,21 @@ class UserController extends Controller
         ]);
 
         if ($request->hasFile('profile_image')) {
-            // Delete old image from Cloudinary if exists
-            if ($user->profile_image_id) {
-                $this->deleteFromCloudinary($user->profile_image_id);
-            }
+            // If old image is a Cloudinary URL, optionally delete it from Cloudinary using public_id
+            // You might want to implement that if needed.
 
-            // Upload new image
-            $uploaded = $this->uploadToCloudinary($request->file('profile_image'));
-            $user->profile_image_url = $uploaded['url'];
-            $user->profile_image_id = $uploaded['public_id'];
+            $uploadedFile = $request->file('profile_image')->getRealPath();
+
+            $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
+                'upload_preset' => 'pf_user',
+            ]);
+
+            $user->profile_image = $uploaded['secure_url'];
         }
 
-        $user->fill($request->except('profile_image'));
-        $user->save();
+        $user->update($request->except('profile_image'));
 
-        return response()->json([
-            'message' => 'Profile updated successfully',
-            'user' => $user,
-        ]);
+        return response()->json(['message' => 'Profile updated successfully', 'user' => $user]);
     }
 
     // Delete User
