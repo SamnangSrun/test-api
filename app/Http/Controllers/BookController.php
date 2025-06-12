@@ -57,39 +57,58 @@ class BookController extends Controller
         return response()->json(['message' => 'Book detail', 'book' => $book]);
     }
 
-    public function addBook(Request $request)
-    {
-        $user = $request->user();
-        if ($user->role !== 'seller') {
-            return response()->json(['message' => 'Only sellers can add books.'], 403);
-        }
+  public function addBook(Request $request)
+{
+    \Log::info('Add Book Request Received', $request->all());
+    
+    $user = $request->user();
+    if ($user->role !== 'seller') {
+        return response()->json(['message' => 'Only sellers can add books.'], 403);
+    }
 
-        $request->validate([
-            'name' => 'required|string',
-            'author' => 'required|string',
-            'description' => 'nullable|string',
-            'price' => 'required|numeric',
-            'stock' => 'required|integer|min:0',
-            'cover_image' => 'nullable|image|mimes:jpg,jpeg,png',
-            'category_name' => 'required|string',
-            
-        ]);
+    $request->validate([
+        'name' => 'required|string',
+        'author' => 'required|string',
+        'description' => 'nullable|string',
+        'price' => 'required|numeric',
+        'stock' => 'required|integer|min:0',
+        'cover_image' => 'nullable|image|mimes:jpg,jpeg,png',
+        'category_name' => 'required|string',
+    ]);
 
+    try {
         $category = Category::firstOrCreate(['name' => $request->category_name]);
+        \Log::info('Category processed', ['category' => $category]);
 
         $imageUrl = null;
         $publicId = null;
 
         if ($request->hasFile('cover_image')) {
-            $uploadedFile = $request->file('cover_image')->getRealPath();
-
-            $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
-                'folder' => 'ml_default',
-                'upload_preset' => 'ml_default',
+            \Log::info('Cover image file detected', [
+                'name' => $request->file('cover_image')->getClientOriginalName(),
+                'size' => $request->file('cover_image')->getSize(),
+                'mime' => $request->file('cover_image')->getMimeType()
             ]);
 
-            $imageUrl = $uploaded['secure_url'];
-            $publicId = $uploaded['public_id'];
+            $uploadedFile = $request->file('cover_image')->getRealPath();
+            \Log::info('File real path', ['path' => $uploadedFile]);
+
+            try {
+                $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
+                    'folder' => 'ml_default',
+                    'upload_preset' => 'ml_default',
+                ]);
+                \Log::info('Cloudinary upload successful', $uploaded);
+                
+                $imageUrl = $uploaded['secure_url'];
+                $publicId = $uploaded['public_id'];
+            } catch (\Exception $e) {
+                \Log::error('Cloudinary upload failed', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+                throw $e;
+            }
         }
 
         $book = Book::create([
@@ -104,9 +123,19 @@ class BookController extends Controller
             'cover_image' => $imageUrl,
             'cover_public_id' => $publicId,
         ]);
-
+        
+        \Log::info('Book created successfully', ['book_id' => $book->id]);
+        
         return response()->json(['message' => 'Book submitted for approval', 'book' => $book]);
+
+    } catch (\Exception $e) {
+        \Log::error('Add Book Error', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        return response()->json(['message' => 'Server Error: ' . $e->getMessage()], 500);
     }
+}
 
     public function approveBook(Request $request, Book $book)
     {
