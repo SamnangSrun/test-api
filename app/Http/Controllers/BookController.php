@@ -83,8 +83,8 @@ class BookController extends Controller
             $uploadedFile = $request->file('cover_image')->getRealPath();
 
             $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
-                'folder' => 'ml_default',
-                'upload_preset' => 'ml_default',
+                'folder' => 'pf_user',
+                'upload_preset' => 'pf_user',
             ]);
 
             $imageUrl = $uploaded['secure_url'];
@@ -207,8 +207,8 @@ class BookController extends Controller
 
             $uploadedFile = $request->file('cover_image')->getRealPath();
             $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
-                'folder' => 'ml_default',
-                'upload_preset' => 'ml_default',
+                'folder' => 'pf_user',
+                'upload_preset' => 'pf_user',
             ]);
 
             $book->cover_image = $uploaded['secure_url'];
