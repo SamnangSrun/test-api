@@ -72,8 +72,7 @@ class BookController extends Controller
             'stock' => 'required|integer|min:0',
             'cover_image' => 'nullable|image',
             'category_name' => 'required|string',
-               'cover_image' => $request->cover_image,      // From frontend
-        'cover_public_id' => $request->cover_public_id 
+            
         ]);
 
         $category = Category::firstOrCreate(['name' => $request->category_name]);
