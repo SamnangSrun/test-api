@@ -57,56 +57,110 @@ class BookController extends Controller
         return response()->json(['message' => 'Book detail', 'book' => $book]);
     }
 
-    public function addBook(Request $request)
-    {
-        $user = $request->user();
-        if ($user->role !== 'seller') {
-            return response()->json(['message' => 'Only sellers can add books.'], 403);
-        }
-
-        $request->validate([
-            'name' => 'required|string',
-            'author' => 'required|string',
-            'description' => 'nullable|string',
-            'price' => 'required|numeric',
-            'stock' => 'required|integer|min:0',
-            'cover_image' => 'nullable|image|mimes:jpg,jpeg,png',
-            'category_name' => 'required|string',
-            
-        ]);
-
-        $category = Category::firstOrCreate(['name' => $request->category_name]);
-
-        $imageUrl = null;
-        $publicId = null;
-
-        if ($request->hasFile('cover_image')) {
-            $uploadedFile = $request->file('cover_image')->getRealPath();
-
-            $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
-                'folder' => 'ml_default',
-                'upload_preset' => 'ml_default',
-            ]);
-
-            $imageUrl = $uploaded['secure_url'];
-            $publicId = $uploaded['public_id'];
-        }
-
-        $book = Book::create([
-            'name' => $request->name,
-            'author' => $request->author,
-            'description' => $request->description,
-            'price' => $request->price,
-            'stock' => $request->stock,
-            'category_id' => $category->id,
-            'seller_id' => $user->id,
-            'status' => 'pending',
-            'cover_image' => $imageUrl,
-            'cover_public_id' => $publicId,
-        ]);
-
-        return response()->json(['message' => 'Book submitted for approval', 'book' => $book]);
+   public function addBook(Request $request)
+{
+    $user = $request->user();
+    if ($user->role !== 'seller') {
+        return response()->json(['message' => 'Only sellers can add books.'], 403);
     }
+
+    $request->validate([
+        'name' => 'required|string|max:255',
+        'author' => 'required|string|max:255',
+        'description' => 'nullable|string',
+        'price' => 'required|numeric|min:0',
+        'stock' => 'required|integer|min:0',
+        'cover_image' => 'required|image|mimes:jpg,jpeg,png|max:5120', // required and max 5MB
+        'category_name' => 'required|string|max:255',
+    ]);
+
+    $category = Category::firstOrCreate(['name' => $request->category_name]);
+
+    // Upload to Cloudinary
+    $uploaded = $this->cloudinary->uploadApi()->upload($request->file('cover_image')->getRealPath(), [
+        'folder' => 'ml_default',
+        'upload_preset' => 'ml_default',
+    ]);
+
+    $imageUrl = $uploaded['secure_url'];
+    $publicId = $uploaded['public_id'];
+
+    $book = Book::create([
+        'name' => $request->name,
+        'author' => $request->author,
+        'description' => $request->description,
+        'price' => $request->price,
+        'stock' => $request->stock,
+        'category_id' => $category->id,
+        'seller_id' => $user->id,
+        'status' => 'pending',
+        'cover_image' => $imageUrl,
+        'cover_public_id' => $publicId,
+    ]);
+
+    return response()->json(['message' => 'Book submitted for approval', 'book' => $book]);
+}
+
+public function updateBook(Request $request, $id)
+{
+    $user = $request->user();
+    if ($user->role !== 'seller') {
+        return response()->json(['message' => 'Only sellers can update books.'], 403);
+    }
+
+    $book = Book::find($id);
+    if (!$book) {
+        return response()->json(['message' => 'Book not found.'], 404);
+    }
+
+    if ($book->seller_id !== $user->id) {
+        return response()->json(['message' => 'Unauthorized'], 403);
+    }
+
+    $validated = $request->validate([
+        'name' => 'sometimes|required|string|max:255',
+        'author' => 'sometimes|required|string|max:255',
+        'description' => 'nullable|string',
+        'price' => 'sometimes|required|numeric|min:0',
+        'stock' => 'sometimes|required|integer|min:0',
+        'cover_image' => 'nullable|image|mimes:jpg,jpeg,png|max:5120',
+        'category_name' => 'sometimes|required|string|exists:categories,name',
+    ]);
+
+    if (isset($validated['name'])) $book->name = $validated['name'];
+    if (isset($validated['author'])) $book->author = $validated['author'];
+    if (isset($validated['description'])) $book->description = $validated['description'];
+    if (isset($validated['price'])) $book->price = $validated['price'];
+    if (isset($validated['stock'])) $book->stock = $validated['stock'];
+
+    if (isset($validated['category_name'])) {
+        $category = Category::where('name', $validated['category_name'])->first();
+        $book->category_id = $category->id;
+    }
+
+    if ($request->hasFile('cover_image')) {
+        if ($book->cover_public_id) {
+            $this->deleteFromCloudinary($book->cover_public_id);
+        }
+
+        $uploaded = $this->cloudinary->uploadApi()->upload($request->file('cover_image')->getRealPath(), [
+            'folder' => 'ml_default',
+            'upload_preset' => 'ml_default',
+        ]);
+
+        $book->cover_image = $uploaded['secure_url'];
+        $book->cover_public_id = $uploaded['public_id'];
+    }
+
+    $book->status = 'pending';
+    $book->reject_note = null;
+
+    $book->save();
+    $book->load('category');
+
+    return response()->json(['message' => 'Book updated and re-submitted.', 'book' => $book]);
+}
+
 
     public function approveBook(Request $request, Book $book)
     {
@@ -160,70 +214,7 @@ class BookController extends Controller
         return response()->json(['message' => 'Book deleted successfully.']);
     }
 
-    public function updateBook(Request $request, $id)
-    {
-        $user = $request->user();
-        if ($user->role !== 'seller') {
-            return response()->json(['message' => 'Only sellers can update books.'], 403);
-        }
-
-        $book = Book::find($id);
-        if (!$book) {
-            return response()->json(['message' => 'Book not found.'], 404);
-        }
-
-        if ($book->seller_id !== $user->id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string',
-            'author' => 'sometimes|required|string',
-            'description' => 'nullable|string',
-            'price' => 'sometimes|required|numeric',
-            'stock' => 'sometimes|required|integer|min:0',
-            'cover_image' => 'nullable|image',
-            'category_name' => 'sometimes|required|string|exists:categories,name',
-        ]);
-
-        if (isset($validated['name'])) $book->name = $validated['name'];
-        if (isset($validated['author'])) $book->author = $validated['author'];
-        if (isset($validated['description'])) $book->description = $validated['description'];
-        if (isset($validated['price'])) $book->price = $validated['price'];
-        if (isset($validated['stock'])) $book->stock = $validated['stock'];
-
-        if (isset($validated['category_name'])) {
-            $category = Category::where('name', $validated['category_name'])->first();
-            if ($category) {
-                $book->category_id = $category->id;
-            } else {
-                return response()->json(['message' => 'Category not found.'], 404);
-            }
-        }
-
-        if ($request->hasFile('cover_image')) {
-            if ($book->cover_public_id) {
-                $this->deleteFromCloudinary($book->cover_public_id);
-            }
-
-            $uploadedFile = $request->file('cover_image')->getRealPath();
-            $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
-                'folder' => 'ml_default',
-                'upload_preset' => 'ml_default',
-            ]);
-
-            $book->cover_image = $uploaded['secure_url'];
-            $book->cover_public_id = $uploaded['public_id'];
-        }
-
-        $book->status = 'pending';
-        $book->reject_note = null;
-
-        $book->save();
-        $book->load('category');
-        return response()->json(['message' => 'Book updated and re-submitted.', 'book' => $book]);
-    }
-
+    
     private function deleteFromCloudinary($publicId)
     {
         try {
