@@ -70,7 +70,7 @@ class BookController extends Controller
             'description' => 'nullable|string',
             'price' => 'required|numeric',
             'stock' => 'required|integer|min:0',
-            'cover_image' => 'nullable|image',
+            'cover_image' => 'nullable|image|mimes:jpg,jpeg,png',
             'category_name' => 'required|string',
             
         ]);
