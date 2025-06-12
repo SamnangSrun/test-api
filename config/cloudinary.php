@@ -1,5 +1,5 @@
 <?php
-
+use Cloudinary\Cloudinary;
 /*
  * This file is part of the Laravel Cloudinary package.
  *
@@ -53,4 +53,15 @@ return [
     'cloud_url' => env('CLOUDINARY_URL'),
     'api_url' => env('CLOUDINARY_API_URL'),
 ];
+
+$this->cloudinary = new Cloudinary([
+    'cloud' => [
+        'cloud_name' => env('CLOUDINARY_CLOUD_NAME'),
+        'api_key' => env('CLOUDINARY_API_KEY'),
+        'api_secret' => env('CLOUDINARY_API_SECRET'),
+    ],
+    'url' => [
+        'secure' => true, // Make sure this matches your environment
+    ],
+]);
 
