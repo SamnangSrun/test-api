@@ -57,146 +57,56 @@ class BookController extends Controller
         return response()->json(['message' => 'Book detail', 'book' => $book]);
     }
 
-   public function addBook(Request $request)
-{
-    \Log::info('Starting book creation process', ['user_id' => $request->user()->id]);
-
-    try {
+    public function addBook(Request $request)
+    {
         $user = $request->user();
         if ($user->role !== 'seller') {
             return response()->json(['message' => 'Only sellers can add books.'], 403);
         }
 
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'author' => 'required|string|max:255',
+        $request->validate([
+            'name' => 'required|string',
+            'author' => 'required|string',
             'description' => 'nullable|string',
-            'price' => 'required|numeric|min:0.01',
-            'stock' => 'required|integer|min:1',
-            'cover_image' => 'nullable|image|mimes:jpg,jpeg,png|max:5120', // 5MB max
-            'category_name' => 'required|string|max:255',
+            'price' => 'required|numeric',
+            'stock' => 'required|integer|min:0',
+            'cover_image' => 'nullable|image|mimes:jpg,jpeg,png',
+            'category_name' => 'required|string',
+            
         ]);
 
-        \Log::debug('Validation passed', ['data' => $validated]);
-
-        // Process category
-        $category = Category::firstOrCreate(['name' => $validated['category_name']]);
-        \Log::info('Category processed', ['category_id' => $category->id]);
+        $category = Category::firstOrCreate(['name' => $request->category_name]);
 
         $imageUrl = null;
         $publicId = null;
 
         if ($request->hasFile('cover_image')) {
-            \Log::debug('Cover image detected', [
-                'original_name' => $request->file('cover_image')->getClientOriginalName(),
-                'size' => $request->file('cover_image')->getSize(),
-                'mime_type' => $request->file('cover_image')->getMimeType()
+            $uploadedFile = $request->file('cover_image')->getRealPath();
+
+            $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
+                'folder' => 'ml_default',
+                'upload_preset' => 'ml_default',
             ]);
 
-            try {
-                $file = $request->file('cover_image');
-                
-                // Verify file is readable
-                if (!$file->isReadable()) {
-                    throw new \Exception("File is not readable");
-                }
-
-                // Alternative upload method using file contents
-                $fileContent = file_get_contents($file->getRealPath());
-                
-                $uploadResponse = $this->cloudinary->uploadApi()->upload(
-                    $fileContent,
-                    [
-                        'folder' => 'book_covers',
-                        'upload_preset' => 'unsigned_uploads', // Recommended for API uploads
-                        'resource_type' => 'image',
-                        'timeout' => 30 // Increase timeout to 30 seconds
-                    ]
-                );
-
-                \Log::debug('Cloudinary upload successful', [
-                    'public_id' => $uploadResponse['public_id'],
-                    'url' => $uploadResponse['secure_url']
-                ]);
-
-                $imageUrl = $uploadResponse['secure_url'];
-                $publicId = $uploadResponse['public_id'];
-            } catch (\Exception $e) {
-                \Log::error('Cloudinary upload failed', [
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-                return response()->json([
-                    'message' => 'Failed to upload cover image',
-                    'error' => $e->getMessage()
-                ], 500);
-            }
+            $imageUrl = $uploaded['secure_url'];
+            $publicId = $uploaded['public_id'];
         }
 
-        // Create the book
-        try {
-            $book = Book::create([
-                'name' => $validated['name'],
-                'author' => $validated['author'],
-                'description' => $validated['description'] ?? null,
-                'price' => $validated['price'],
-                'stock' => $validated['stock'],
-                'category_id' => $category->id,
-                'seller_id' => $user->id,
-                'status' => 'pending',
-                'cover_image' => $imageUrl,
-                'cover_public_id' => $publicId,
-            ]);
-
-            \Log::info('Book created successfully', ['book_id' => $book->id]);
-
-            return response()->json([
-                'message' => 'Book submitted for approval',
-                'book' => $book->load('category')
-            ], 201);
-
-        } catch (\Exception $e) {
-            \Log::error('Book creation failed', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            
-            // Clean up uploaded image if book creation failed
-            if ($publicId) {
-                try {
-                    $this->cloudinary->uploadApi()->destroy($publicId);
-                } catch (\Exception $cleanupError) {
-                    \Log::error('Failed to cleanup image', [
-                        'public_id' => $publicId,
-                        'error' => $cleanupError->getMessage()
-                    ]);
-                }
-            }
-
-            return response()->json([
-                'message' => 'Failed to create book',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        \Log::warning('Validation failed', ['errors' => $e->errors()]);
-        return response()->json([
-            'message' => 'Validation failed',
-            'errors' => $e->errors()
-        ], 422);
-        
-    } catch (\Exception $e) {
-        \Log::error('Unexpected error in addBook', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
+        $book = Book::create([
+            'name' => $request->name,
+            'author' => $request->author,
+            'description' => $request->description,
+            'price' => $request->price,
+            'stock' => $request->stock,
+            'category_id' => $category->id,
+            'seller_id' => $user->id,
+            'status' => 'pending',
+            'cover_image' => $imageUrl,
+            'cover_public_id' => $publicId,
         ]);
-        return response()->json([
-            'message' => 'An unexpected error occurred',
-            'error' => $e->getMessage()
-        ], 500);
+
+        return response()->json(['message' => 'Book submitted for approval', 'book' => $book]);
     }
-}
 
     public function approveBook(Request $request, Book $book)
     {
@@ -298,8 +208,8 @@ class BookController extends Controller
 
             $uploadedFile = $request->file('cover_image')->getRealPath();
             $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
-                'folder' => 'booksbooks',
-                'upload_preset' => 'booksbooks',
+                'folder' => 'ml_default',
+                'upload_preset' => 'ml_default',
             ]);
 
             $book->cover_image = $uploaded['secure_url'];
