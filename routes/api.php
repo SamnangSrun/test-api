@@ -31,10 +31,7 @@ Route::get('/books/search', [BookController::class, 'search']);
 // Route::middleware(['auth:sanctum'])->group(function () {
 
     // General Authenticated User Routes
-    Route::put('/users/{user}', [UserController::class, 'updateProfile']);
-    Route::delete('/users/{user}', [UserController::class, 'deleteUser']);
-    Route::get('/users', [UserController::class, 'listUsers']);
-
+ 
     // Admin-only routes (Requires Admin Role)
     // Route::middleware(['role:admin'])->group(function () {
         
@@ -46,6 +43,10 @@ Route::get('/books/search', [BookController::class, 'search']);
 
         // Seller Requests Routes
         Route::middleware(['auth:sanctum'])->group(function () {
+               Route::put('/users/{user}', [UserController::class, 'updateProfile']);
+    Route::delete('/users/{user}', [UserController::class, 'deleteUser']);
+    Route::get('/users', [UserController::class, 'listUsers']);
+
             Route::delete('/users/{user}/remove-profile-image', [UserController::class, 'deleteProfileImage']);
             Route::get('/user/contact-history', [MessageController::class, 'userContactHistory']);
             Route::post('/contact-admin', [MessageController::class, 'contact']);

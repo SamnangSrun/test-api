@@ -19,6 +19,8 @@ class Book extends Model
         'seller_id',
         'status',
         'reject_note',
+        'stock',
+        'cover_public_id',
     ];
 
     public function category()
