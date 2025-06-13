@@ -91,51 +91,54 @@ class CartController extends Controller
     /**
      * Get current user's cart contents
      */
-    public function viewCart()
-    {
-        $user = auth()->user();
-        
-        if (!$user) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Authentication required'
-            ], 401);
-        }
+ public function viewCart()
+{
+    $user = auth()->user();
+    
+    if (!$user) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Authentication required'
+        ], 401);
+    }
 
-        $cart = $user->cart()->with(['items.book.seller'])->first();
+    $cart = $user->cart()->with(['items' => function($query) {
+        $query->with(['book' => function($query) {
+            $query->select('id', 'name', 'author', 'price', 'cover_image');
+        }]);
+    }])->first();
 
-        if (!$cart || $cart->items->isEmpty()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Your cart is empty',
-                'items' => [],
-                'total' => 0
-            ]);
-        }
-
-        // Calculate totals
-        $items = $cart->items->map(function ($item) {
-            return [
-                'id' => $item->id,
-                'book_id' => $item->book_id,
-                'title' => $item->book->name,
-                'author' => $item->book->author,
-                'price' => $item->price,
-                'quantity' => $item->quantity,
-                'subtotal' => $item->price * $item->quantity,
-                'cover_image' => $item->book->cover_image
-            ];
-        });
-
-        $total = $items->sum('subtotal');
-
+    if (!$cart || $cart->items->isEmpty()) {
         return response()->json([
             'success' => true,
-            'items' => $items,
-            'total' => $total,
-            'item_count' => $items->count()
+            'message' => 'Your cart is empty',
+            'items' => [],
+            'total' => 0
         ]);
     }
+
+    $items = $cart->items->map(function ($item) {
+        return [
+            'id' => $item->id,
+            'book_id' => $item->book_id,
+            'title' => $item->book->name ?? 'Unknown Book',
+            'author' => $item->book->author ?? 'Unknown Author',
+            'price' => $item->price,
+            'quantity' => $item->quantity,
+            'subtotal' => $item->price * $item->quantity,
+            'cover_image' => $item->book->cover_image ?? '/images/default-book-cover.jpg'
+        ];
+    });
+
+    $total = $items->sum('subtotal');
+
+    return response()->json([
+        'success' => true,
+        'items' => $items,
+        'total' => $total,
+        'item_count' => $items->count()
+    ]);
+}
 
     /**
      * Update cart item quantity
