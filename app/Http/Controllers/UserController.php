@@ -78,7 +78,7 @@ class UserController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'seller',
+            'role' => 'admin',
             'profile_image' => $imageUrl,
             'profile_public_id' => $publicId,
         ]);
