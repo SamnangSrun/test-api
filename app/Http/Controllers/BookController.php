@@ -57,47 +57,105 @@ class BookController extends Controller
         return response()->json(['message' => 'Book detail', 'book' => $book]);
     }
 
-    public function addBook(Request $request)
-    {
-        $user = $request->user();
-        if ($user->role !== 'seller') {
-            return response()->json(['message' => 'Only sellers can add books.'], 403);
-        }
+//    public function addBook(Request $request)
+// {
+//     $user = $request->user();
+//     if ($user->role !== 'seller') {
+//         return response()->json(['success' => false, 'message' => 'Only sellers can add books.'], 403);
+//     }
 
-        $request->validate([
-            'name' => 'required|string',
-            'author' => 'required|string',
-            'description' => 'nullable|string',
-            'price' => 'required|numeric',
-            'stock' => 'required|integer|min:0',
-            'cover_image' => 'nullable|image',
-            'category_name' => 'required|string',
-            
-        ]);
+//     $request->validate([
+//         'name' => 'required|string',
+//         'author' => 'required|string',
+//         'description' => 'nullable|string',
+//         'price' => 'required|numeric',
+//         'stock' => 'required|integer|min:0',
+//         'cover_image' => 'nullable|image',
+//         'category_name' => 'required|string',
+//     ]);
 
+//     $category = Category::firstOrCreate(['name' => $request->category_name]);
+
+//     $imageUrl = null;
+//     $publicId = null;
+
+//     if ($request->hasFile('cover_image')) {
+//         $uploadedFile = $request->file('cover_image')->getRealPath();
+
+//         $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
+//             'folder' => 'ml_default',
+//             'upload_preset' => 'ml_default',
+//         ]);
+
+//         $imageUrl = $uploaded['secure_url'];
+//         $publicId = $uploaded['public_id'];
+//     }
+
+//     $book = Book::create([
+//         'name' => $request->name,
+//         'author' => $request->author,
+//         'description' => $request->description,
+//         'price' => $request->price,
+//         'stock' => $request->stock,
+//         'category_id' => $category->id,
+//         'seller_id' => $user->id,
+//         'status' => 'pending',
+//         'cover_image' => $imageUrl,
+//         'cover_public_id' => $publicId,
+//     ]);
+
+//     // Return response with category relationship loaded and status 201
+//     return response()->json([
+//         'success' => true,
+//         'message' => 'Book submitted for approval',
+//         'data' => $book->load('category'),
+//     ], 201);
+// }
+public function addBook(Request $request)
+{
+    $user = $request->user();
+    if ($user->role !== 'seller') {
+        return response()->json(['success' => false, 'message' => 'Only sellers can add books.'], 403);
+    }
+
+    $validated = $request->validate([
+        'name' => 'required|string',
+        'author' => 'required|string',
+        'description' => 'nullable|string',
+        'price' => 'required|numeric',
+        'stock' => 'required|integer|min:0',
+        'cover_image' => 'nullable|image',
+        'category_name' => 'required|string',
+    ]);
+
+    try {
         $category = Category::firstOrCreate(['name' => $request->category_name]);
 
         $imageUrl = null;
         $publicId = null;
 
         if ($request->hasFile('cover_image')) {
-            $uploadedFile = $request->file('cover_image')->getRealPath();
+            try {
+                $uploadedFile = $request->file('cover_image')->getRealPath();
+                $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
+                    'folder' => 'ml_default',
+                    'upload_preset' => 'ml_default',
+                ]);
 
-            $uploaded = $this->cloudinary->uploadApi()->upload($uploadedFile, [
-                'folder' => 'ml_default',
-                'upload_preset' => 'ml_default',
-            ]);
-
-            $imageUrl = $uploaded['secure_url'];
-            $publicId = $uploaded['public_id'];
+                $imageUrl = $uploaded['secure_url'];
+                $publicId = $uploaded['public_id'];
+            } catch (\Exception $e) {
+                // Log the error but continue without the image
+                \Log::error('Cloudinary upload failed: ' . $e->getMessage());
+            }
         }
 
         $book = Book::create([
-            'name' => $request->name,
-            'author' => $request->author,
-            'description' => $request->description,
-            'price' => $request->price,
-            'stock' => $request->stock,
+            'name' => $validated['name'],
+            'author' => $validated['author'],
+            'description' => $validated['description'],
+            'price' => $validated['price'],
+            'stock' => $validated['stock'],
             'category_id' => $category->id,
             'seller_id' => $user->id,
             'status' => 'pending',
@@ -105,8 +163,21 @@ class BookController extends Controller
             'cover_public_id' => $publicId,
         ]);
 
-        return response()->json(['message' => 'Book submitted for approval', 'book' => $book]);
+        return response()->json([
+            'success' => true,
+            'message' => 'Book submitted for approval',
+            'data' => $book->load('category'),
+        ], 201);
+
+    } catch (\Exception $e) {
+        \Log::error('Book creation failed: ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to create book. Please try again.',
+        ], 500);
     }
+}
+
 
     public function approveBook(Request $request, Book $book)
     {
