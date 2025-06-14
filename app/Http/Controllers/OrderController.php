@@ -186,4 +186,3 @@ public function placeOrder()
         return response()->json(['message' => 'Order deleted successfully']);
     }
 }
-    
