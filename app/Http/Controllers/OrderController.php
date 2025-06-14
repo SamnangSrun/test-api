@@ -11,51 +11,47 @@ use Illuminate\Support\Facades\Auth;
 
 class OrderController extends Controller
 {
-//   public function sellerSales()
-// {
-//     $sellerId = Auth::id(); // assuming seller is authenticated
+// In OrderController.php
 
-//     $orderItems = OrderItem::with(['order.user', 'book'])
-//         ->whereHas('book', function ($query) use ($sellerId) {
-//             $query->where('seller_id', $sellerId);
-//         })
-//         ->get();
+public function adminAllOrders()
+{
+    $user = auth()->user();
 
-//     $groupedOrders = $orderItems->groupBy('order_id')->map(function ($items) {
-//         $order = $items->first()->order;
-//         $buyer = $order->user;
+    // Ensure only admin can access this
+    if ($user->role !== 'admin') {
+        return response()->json(['error' => 'Unauthorized. Only admin can view all orders.'], 403);
+    }
 
-//         return [
-//             'order_id' => $order->id,
-//             'buyer_name' => $buyer->name ?? 'Guest',
-//             'buyer_email' => $buyer->email ?? null,
-//             'payment_status' => $order->payment_status,
-//             'order_status' => $order->order_status,
-//             'order_date' => $order->created_at,
-//             'total_earned' => $items->sum(function ($item) {
-//                 return $item->price * $item->quantity;
-//             }),
-//             'books' => $items->map(function ($item) {
-//                 return [
-//                     'name' => $item->book->name ?? 'Unknown',
-//                     'quantity' => $item->quantity,
-//                     'price' => $item->price,
-//                 ];
-//             }),
-//             'payments' => $items->map(function ($item) {
-//                 return [
-//                    'order_notes' => $payment->order_note ?? 'null',
-                    
-//                 ];
-//             }),
-//         ];
-//     })->values();
+    // Fetch all orders with related user and book details
+    $orders = Order::with(['user', 'orderItems.book'])->latest()->get();
 
-//     return response()->json([
-//         'sales' => $groupedOrders
-//     ]);
-// }
- // In OrderController.php
+  $formattedOrders = $orders->map(function ($order) {
+    return [
+        'order_id' => $order->id,
+        'user' => [
+            'id' => $order->user->id ?? null,
+            'name' => $order->user->name ?? 'Guest',
+            'email' => $order->user->email ?? null,
+        ],
+        'total_price' => $order->total_price,
+        'payment_status' => $order->payment_status,
+        'order_status' => $order->order_status,
+        'created_at' => $order->created_at->toDateTimeString(),
+        'items' => $order->orderItems->map(function ($item) {
+            return [
+                'book_name' => $item->book->name ?? 'Unknown',
+                'book_image' => $item->book->cover_image ?? null, // ✅ This line updated
+                'quantity' => $item->quantity,
+                'price' => $item->price,
+            ];
+        }),
+    ];
+});
+
+    return response()->json(['orders' => $formattedOrders]);
+}
+
+
 public function userOrders()
 {
     $orders = Order::with('orderItems.book')

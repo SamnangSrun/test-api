@@ -58,6 +58,8 @@ Route::get('/books/search', [BookController::class, 'search']);
 
     Route::middleware('role:admin')->post('/notifications/send', [NotificationController::class, 'sendToUser']);
     // Endpoint for admin to view all messages:
+            Route::get('/admin/orders', [OrderController::class, 'adminAllOrders']);
+
             Route::get('/admin/messages', [MessageController::class, 'listMessages']);
 
             Route::get('users', [UserController::class, 'listUsers']);
