@@ -26,6 +26,30 @@ class BookController extends Controller
         ]);
     }
 
+    public function adminDeleteBook(Request $request, $id)
+{
+    $user = $request->user();
+
+    if ($user->role !== 'admin') {
+        return response()->json(['message' => 'Unauthorized. Only admins can delete books.'], 403);
+    }
+
+    $book = Book::find($id);
+
+    if (!$book) {
+        return response()->json(['message' => 'Book not found.'], 404);
+    }
+
+    if ($book->cover_public_id) {
+        $this->deleteFromCloudinary($book->cover_public_id);
+    }
+
+    $book->delete();
+
+    return response()->json(['message' => 'Book deleted successfully by admin.']);
+}
+
+
     public function listAllBooks(Request $request)
     {
         $user = $request->user();
