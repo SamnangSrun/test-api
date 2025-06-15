@@ -243,4 +243,27 @@ public function listApprovedRequests()
     return response()->json(['message' => 'Unauthorized'], 403);
 }
 
+
+public function mySellerRequest()
+{
+    $user = Auth::user();
+
+    $request = SellerRequest::where('seller_id', $user->id)->latest()->first();
+
+    if (!$request) {
+        return response()->json(['message' => 'No seller request found'], 404);
+    }
+
+    return response()->json([
+        'id' => $request->id,
+        'status' => $request->status,
+        'rejection_note' => $request->status === 'disapproved' ? $request->rejection_note : null,
+        'name' => $request->name,
+        'store_name' => $request->store_name,
+        'birthdate' => $request->birthdate,
+        'phone_number' => $request->phone_number,
+    ], 200);
+}
+
+
 }
