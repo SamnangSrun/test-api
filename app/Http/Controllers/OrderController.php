@@ -25,31 +25,38 @@ public function adminAllOrders()
     // Fetch all orders with related user and book details
     $orders = Order::with(['user', 'orderItems.book'])->latest()->get();
 
-  $formattedOrders = $orders->map(function ($order) {
-    return [
-        'order_id' => $order->id,
-        'user' => [
-            'id' => $order->user->id ?? null,
-            'name' => $order->user->name ?? 'Guest',
-            'email' => $order->user->email ?? null,
-        ],
-        'total_price' => $order->total_price,
-        'payment_status' => $order->payment_status,
-        'order_status' => $order->order_status,
-        'created_at' => $order->created_at->toDateTimeString(),
-        'items' => $order->orderItems->map(function ($item) {
-            return [
-                'book_name' => $item->book->name ?? 'Unknown',
-                'book_image' => $item->book->cover_image ?? null, // ✅ This line updated
-                'quantity' => $item->quantity,
-                'price' => $item->price,
-            ];
-        }),
-    ];
-});
+    $formattedOrders = $orders->map(function ($order) {
+        return [
+            'order_id' => $order->id,
+            'user' => [
+                'id' => $order->user->id ?? null,
+                'name' => $order->user->name ?? 'Guest',
+                'email' => $order->user->email ?? null,
+            ],
+            'total_price' => $order->total_price,
+            'payment_status' => $order->payment_status,
+            'order_status' => $order->order_status,
+            'created_at' => $order->created_at->toDateTimeString(),
+            'items' => $order->orderItems->map(function ($item) {
+                return [
+                    'book_name' => $item->book->name ?? 'Unknown',
+                    'book_image' => [
+                        'url' => $item->book->cover_image ?? null,
+                        'public_id' => $item->book->cover_public_id ?? null,
+                    ],
+                    'quantity' => $item->quantity,
+                    'price' => $item->price,
+                ];
+            }),
+        ];
+    });
 
-    return response()->json(['orders' => $formattedOrders]);
+    return response()->json([
+        'message' => 'All orders with full book image URLs',
+        'orders' => $formattedOrders,
+    ]);
 }
+
 
 
 public function userOrders()
